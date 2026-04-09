@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>PREVISE - 斑马鱼“捕食者之眼”可视化交互探索系统</title>
+    <style>
+        :root { --bg: #010101; --panel: #0a0a0a; --accent: #00f7ff; }
+        body { background: var(--bg); color: #eee; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 10px 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        
+        /* 统一所有主容器的宽度计算规则，确保绝对对齐 */
+        .header-logo { width: 100%; max-width: 1560px; box-sizing: border-box; display: flex; align-items: center; gap: 30px; margin-bottom: 25px; padding-left: 10px; margin-top: 15px; }
+        .header-logo h1 { margin: 0; font-size: 56px; letter-spacing: 5px; color: var(--accent); font-weight: 900; line-height: 1; }
+        .title-group { display: flex; flex-direction: column; gap: 8px; }
+        .title-group .en-name { font-size: 17px; color: #999; letter-spacing: 1.2px; font-family: 'Consolas', monospace; text-transform: uppercase; font-weight: 600; }
+        .title-group .zh-name { font-size: 28px; color: #fff; letter-spacing: 2px; font-weight: bold; line-height: 1; }
+
+        /* 参数区域：宽度规则与 main-container 完全一致 */
+        .controls { width: 100%; max-width: 1560px; box-sizing: border-box; background: #121212; padding: 22px 35px; border-radius: 12px; margin-bottom: 20px; display: flex; gap: 45px; border: 1px solid #222; align-items: center; }
+        .label-row { display: flex; gap: 18px; font-size: 16px; margin-bottom: 4px; align-items: center; }
+        .val-input { background: #000; border: 1px solid #444; color: #ffcc00; font-weight: bold; font-family: 'Consolas', monospace; width: 72px; padding: 7px 10px; border-radius: 4px; outline: none; font-size: 17px; }
+        
+        /* 主容器：强制 100% 宽度，受 max-width 限制，确保右侧整齐划一 */
+        .main-container { display: flex; gap: 20px; width: 100%; max-width: 1560px; box-sizing: border-box; align-items: stretch; }
+        .left-col { display: flex; flex-direction: column; gap: 20px; flex: 0 0 460px; justify-content: space-between; }
+        .left-col .panel { height: calc(50% - 10px); display: flex; flex-direction: column; }
+        .left-col canvas { flex: 1; object-fit: contain; max-height: 100%; margin: auto; }
+        
+        .right-col { display: flex; flex-direction: column; gap: 20px; flex: 1; min-width: 0; }
+        .panel { background: var(--panel); border-radius: 12px; padding: 22px; border: 1px solid #1a1a1a; position: relative; }
+        h3 { margin: 0 0 20px 0; font-size: 24px; color: #fff; letter-spacing: 1px; border-left: 7px solid var(--accent); padding-left: 18px; font-weight: 700; flex-shrink: 0; }
+        
+        canvas { background: #000; border-radius: 8px; cursor: crosshair; display: block; }
+        .visual-panel-content { display: flex; align-items: center; gap: 20px; justify-content: center; flex: 1; min-width: 0; }
+        .v-slider-container { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 65px; flex-shrink: 0; }
+        input[type=range].vertical { appearance: slider-vertical; width: 14px; height: 480px; accent-color: var(--accent); cursor: pointer; }
+        .v-val { color: #ffcc00; font-weight: bold; font-size: 20px; font-family: 'Consolas', monospace; }
+        .status-badge { padding: 5px 10px; border-radius: 4px; font-size: 14px; font-weight: bold; margin-left: 10px; border: 1px solid currentColor; }
+        
+        .footer { margin-top: auto; padding: 30px 0 20px 0; text-align: center; color: #666; font-size: 14px; font-family: 'Consolas', monospace; width: 100%; letter-spacing: 0.5px; }
+    </style>
+</head>
+<body>
+
+<div class="header-logo">
+    <h1>PREVISE</h1>
+    <div class="title-group">
+        <div class="en-name">PRedator's Eye Visualization & Interactive System Explorer</div>
+        <div class="zh-name">斑马鱼“捕食者之眼”可视化交互探索系统</div>
+    </div>
+</div>
+
+<div class="controls">
+    <div style="flex: 2;">
+        <div class="label-row">
+            <span>Azimuth: <input type="number" id="in-az" class="val-input" step="0.5"> <span style="color:#666">°</span></span>
+            <span>Elevation: <input type="number" id="in-el" class="val-input" step="0.5"> <span style="color:#666">°</span></span>
+            <span>3D Dist: <input type="number" id="in-dist" class="val-input" step="0.1"> <span style="color:#666">mm</span></span>
+            <span>Visual Angle: <input type="number" id="in-va" class="val-input" step="0.1" style="color: #00f7ff;"> <span style="color:#666">°</span></span>
+        </div>
+    </div>
+    <div style="flex: 1; border-left: 1px solid #333; padding-left: 20px; font-size: 16px; display: flex; align-items: center;">
+        <span style="color:#888">Vergence Angle:</span> 
+        <span id="v-conv-txt" style="color:#ffcc00; font-weight:bold; font-size: 22px; margin: 0 12px;">20°</span>
+        <span id="v-status" class="status-badge" style="color: #00f7ff;">RESTING</span>
+    </div>
+</div>
+
+<div class="main-container">
+    <div class="left-col">
+        <div class="panel"><h3>1A. 轮虫位置（俯视）</h3><canvas id="c-top" width="512" height="512" style="width: 100%;"></canvas></div>
+        <div class="panel"><h3>1B. 轮虫位置（侧视）</h3><canvas id="c-side" width="512" height="512" style="width: 100%;"></canvas></div>
+    </div>
+    <div class="right-col">
+        <div class="panel">
+            <h3>2. 视空间投影(Visual Space)</h3>
+            <div class="visual-panel-content">
+                <div class="v-slider-container">
+                    <input type="range" id="input-conv" class="vertical" min="15" max="60" value="20" orient="vertical">
+                    <span id="v-side-txt" class="v-val">20°</span>
+                </div>
+                <canvas id="c-vis" width="940" height="540" style="width: 100%; max-width: 940px; height: auto;"></canvas>
+            </div>
+        </div>
+        <div style="display: flex; gap: 20px;">
+            <div class="panel" style="flex: 1; min-width: 0;">
+                <h3>3. 视网膜激活区域</h3>
+                <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 5px;">
+                    <div style="text-align: center; flex: 1;"><canvas id="c-ret-l" width="300" height="300" style="width: 100%; max-width: 230px; height: auto;"></canvas><div style="color: #aaa; font-size: 13px; margin-top: 5px;">LEFT EYE</div></div>
+                    <div style="text-align: center; flex: 1;"><canvas id="c-ret-r" width="300" height="300" style="width: 100%; max-width: 230px; height: auto;"></canvas><div style="color: #aaa; font-size: 13px; margin-top: 5px;">RIGHT EYE</div></div>
+                </div>
+            </div>
+            <div class="panel" style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                <h3>4. 视顶盖激活区域</h3>
+                <div style="display: flex; justify-content: center; align-items: center; flex: 1;">
+                    <canvas id="c-brain" width="500" height="300" style="width: 100%; max-width: 480px; height: auto;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    Developer: Jialiang Zu | Email: zujl2022@ion.ac.cn
+</div>
+
+<script>
+const OT_L_PATH = [[10.0, 2.0], [12.0, 1.0], [13.0, 0.0], [15.0, 0.0], [16.0, 1.0], [17.0, 2.0], [17.0, 3.0], [17.0, 4.0], [17.0, 5.0], [17.0, 6.0], [17.0, 7.0], [17.0, 8.0], [17.0, 9.0], [16.0, 10.0], [16.0, 11.0], [16.0, 12.0], [15.0, 13.0], [14.0, 14.0], [14.0, 15.0], [13.0, 16.0], [12.0, 17.0], [11.0, 18.0], [10.0, 19.0], [9.0, 19.0], [8.0, 20.0], [7.0, 20.0], [6.0, 20.0], [5.0, 20.0], [3.0, 20.0], [2.0, 20.0], [2.0, 18.0], [2.0, 17.0], [2.0, 16.0], [2.0, 15.0], [2.0, 15.0], [3.0, 14.0], [3.0, 12.0], [4.0, 11.0], [4.0, 10.0], [5.0, 9.0], [5.0, 8.0], [5.0, 8.0], [6.0, 7.0], [6.0, 6.0], [7.0, 5.0], [8.0, 4.0], [9.0, 3.0]];
+const OT_R_PATH = [[27.0, 1.0], [28.0, 0.0], [29.0, 0.0], [30.0, 0.0], [31.0, 1.0], [33.0, 2.0], [34.0, 3.0], [35.0, 4.0], [36.0, 5.0], [37.0, 6.0], [37.0, 7.0], [38.0, 8.0], [38.0, 9.0], [39.0, 10.0], [39.0, 11.0], [40.0, 12.0], [40.0, 13.0], [40.0, 14.0], [41.0, 15.0], [41.0, 16.0], [41.0, 17.0], [41.0, 18.0], [41.0, 19.0], [41.0, 20.0], [40.0, 20.0], [39.0, 20.0], [38.0, 20.0], [37.0, 20.0], [35.0, 20.0], [34.0, 19.0], [33.0, 19.0], [32.0, 18.0], [31.0, 17.0], [30.0, 16.0], [29.0, 15.0], [29.0, 14.0], [28.0, 13.0], [27.0, 12.0], [27.0, 12.0], [27.0, 10.0], [26.0, 9.0], [26.0, 8.0], [26.0, 7.0], [26.0, 6.0], [26.0, 5.0], [26.0, 4.0], [26.0, 3.0], [26.0, 2.0]];
+const TOTAL_PATH = [[150.0, 6.67], [150.0, -2.22], [140.95, -15.56], [121.55, -30.37], [100.86, -42.22], [86.64, -48.15], [43.97, -58.52], [29.74, -60.0], [27.16, -58.52], [20.69, -40.74], [1.29, 24.44], [0.0, 34.81], [2.59, 42.22], [19.4, 51.11], [54.31, 60.0], [64.66, 60.0], [84.05, 54.07], [115.09, 39.26], [143.53, 18.52]];
+const SZ_PATH = [[1.29, 34.81], [1.29, 24.44], [2.59, 22.96], [2.59, 20.0], [3.88, 18.52], [3.88, 15.56], [6.47, 11.11], [10.34, 11.11], [11.64, 9.63], [15.52, 9.63], [16.81, 8.15], [19.4, 8.15], [20.69, 6.67], [23.28, 6.67], [24.57, 8.15], [37.5, 8.15], [38.79, 9.63], [51.72, 9.63], [58.19, 14.07], [58.19, 18.52], [51.72, 25.93], [51.72, 27.41], [49.14, 30.37], [49.14, 37.78], [42.67, 42.22], [38.79, 42.22], [37.5, 43.7], [29.74, 43.7], [28.45, 42.22], [24.57, 42.22], [23.28, 40.74], [20.69, 40.74], [16.81, 37.78], [12.93, 37.78], [11.64, 36.3], [2.59, 36.3]];
+
+const state = { pos: { x: -0.3, y: 5.5, z: 2.5 }, conv: 20, zoom: { top: 1, side: 1 }, imgs: { top: new Image(), side: new Image() }, ready: 0, cellsL: [], cellsR: [] };
+const SCALE_MM = 25; const FISH_LENGTH_MM = 4.0; const PREY_DIAMETER_MM = 0.3; 
+
+const canv = { top: document.getElementById('c-top'), side: document.getElementById('c-side'), vis: document.getElementById('c-vis'), rl: document.getElementById('c-ret-l'), rr: document.getElementById('c-ret-r'), brain: document.getElementById('c-brain') };
+const ui = { az: document.getElementById('in-az'), el: document.getElementById('in-el'), dist: document.getElementById('in-dist'), va: document.getElementById('in-va'), conv: document.getElementById('input-conv'), convTxt: document.getElementById('v-conv-txt'), sideTxt: document.getElementById('v-side-txt'), status: document.getElementById('v-status') };
+
+function generateRetinalCells(isLeft) {
+    const cells = []; const NUM_CELLS = 1000; const RADIUS = 110; 
+    let seed = isLeft ? 1111 : 9999;
+    function seededRandom() { let t = seed += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+    while (cells.length < NUM_CELLS) {
+        let nx = seededRandom() * 2 - 1, ny = seededRandom() * 2 - 1;
+        if (nx * nx + ny * ny > 0.96) continue;
+        let anatX = isLeft ? nx : -nx; let anatY = ny; 
+        let dxHot = anatX - 0.5, dyHot = anatY - 0.5; let hotspot = Math.exp(-(dxHot*dxHot + dyHot*dyHot) / 0.25); 
+        let dxBlind = anatX - (-0.8), dyBlind = anatY - (-0.8); let blindAtten = 1.0 - 0.9 * Math.exp(-(dxBlind*dxBlind + dyBlind*dyBlind) / 0.15);
+        let prob = (0.1 + hotspot * 0.9) * blindAtten;
+        if (seededRandom() < prob) cells.push({ x: nx * RADIUS, y: ny * RADIUS });
+    }
+    return cells;
+}
+state.cellsL = generateRetinalCells(true); state.cellsR = generateRetinalCells(false);
+
+const checkReady = () => { state.ready++; if (state.ready >= 2) render(); };
+state.imgs.top.src = 'image_cbb0ea.png'; state.imgs.side.src = 'image_cbb187.png';
+state.imgs.top.onload = state.imgs.top.onerror = checkReady;
+state.imgs.side.onload = state.imgs.side.onerror = checkReady;
+
+function drawAxis(ctx, w, h, cx, cy, labelX, labelY, invertX = false, zoom = 1) {
+    ctx.save(); const scalePx = SCALE_MM * zoom; const maxI = Math.ceil(Math.max(w, h) / scalePx); 
+    const majorLw = Math.max(1.5, Math.min(1.5 * zoom, 6));
+    for(let i = -maxI; i <= maxI; i++) {
+        let isMajor = (i % 5 === 0); if (!isMajor && scalePx < 6.0) continue; 
+        ctx.beginPath(); ctx.strokeStyle = isMajor ? '#4a4a4a' : '#1a1a1a'; ctx.lineWidth = isMajor ? majorLw : 0.5; 
+        let p = i * scalePx, dx = cx + (invertX ? -p : p), dy = cy + p;
+        ctx.moveTo(dx, 0); ctx.lineTo(dx, h); ctx.moveTo(0, dy); ctx.lineTo(w, dy); ctx.stroke();
+    }
+    ctx.strokeStyle = '#666'; ctx.lineWidth = majorLw + 1;
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px Consolas'; ctx.textAlign = 'center';
+    for(let i = -maxI; i <= maxI; i += 5) { if(i === 0) continue; let p = i * scalePx, dx = cx + (invertX ? -p : p), dy = cy + p; ctx.fillText(i, dx, cy + 18); ctx.textAlign = 'right'; ctx.fillText(-i, cx - 12, dy + 5); ctx.textAlign = 'center'; }
+    ctx.restore();
+}
+
+function render() {
+    const {x, y, z} = state.pos; const dist3d = Math.sqrt(x*x + y*y + z*z), dist2d = Math.sqrt(x*x + y*y); 
+    const az = Math.atan2(x, y) * 180 / Math.PI, el = Math.atan2(z, dist2d) * 180 / Math.PI;
+    const va = 2 * Math.atan((PREY_DIAMETER_MM / 2) / Math.max(0.01, dist3d)) * (180 / Math.PI);
+    if (document.activeElement !== ui.az) ui.az.value = az.toFixed(1);
+    if (document.activeElement !== ui.el) ui.el.value = el.toFixed(1);
+    if (document.activeElement !== ui.dist) ui.dist.value = dist3d.toFixed(1);
+    if (document.activeElement !== ui.va) ui.va.value = va.toFixed(1);
+    ui.convTxt.innerText = state.conv + '°'; ui.sideTxt.innerText = state.conv + '°';
+    ui.status.innerText = state.conv > 30 ? "HUNTING" : "RESTING"; ui.status.style.color = state.conv > 30 ? "#ff00ff" : "#00f7ff";
+    const zT = state.zoom.top, zS = state.zoom.side; 
+    const tCtx = canv.top.getContext('2d'); tCtx.clearRect(0,0,512,512); drawAxis(tCtx, 512, 512, 256, 320, "X", "Y", false, zT);
+    if (state.imgs.top.complete && state.imgs.top.naturalWidth > 0) { const tH = FISH_LENGTH_MM * SCALE_MM * zT, tW = tH * (state.imgs.top.naturalWidth/state.imgs.top.naturalHeight); tCtx.drawImage(state.imgs.top, 256 - tW/2, 320 - tH*0.063, tW, tH); }
+    drawPointer(tCtx, 256, 320, x * SCALE_MM * zT, -y * SCALE_MM * zT);
+    const sCtx = canv.side.getContext('2d'); sCtx.clearRect(0,0,512,512); drawAxis(sCtx, 512, 512, 380, 256, "Y", "Z", true, zS);
+    if (state.imgs.side.complete && state.imgs.side.naturalWidth > 0) { const sW = FISH_LENGTH_MM * SCALE_MM * zS, sH = sW * (state.imgs.side.naturalHeight/state.imgs.side.naturalWidth); sCtx.drawImage(state.imgs.side, 380 - sW*0.11, 256 - sH/2, sW, sH); }
+    drawPointer(sCtx, 380, 256, -y * SCALE_MM * zS, -z * SCALE_MM * zS);
+    const visibility = drawVisualSpace(az, el, dist3d, va);
+    drawRetinaMapping(az, el, va, visibility.left, visibility.right);
+    drawTectalActivity(az, el, va, visibility);
+}
+
+function drawPointer(ctx, cx, cy, ox, oy) { ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255, 204, 0, 0.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + ox, cy + oy); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(cx + ox, cy + oy, 4, 0, Math.PI*2); ctx.fill(); }
+
+function drawVisualSpace(az, el, dist, va) {
+    const ctx = canv.vis.getContext('2d'), w = 940, h = 540;
+    ctx.clearRect(0,0,w,h); 
+    ctx.save(); 
+    
+    const padL = 130;
+    const padB = 60, padR = 30, padT = 30;
+    
+    const innerW = w - padL - padR;
+    const innerH = h - padB - padT;
+    const cx = padL + innerW/2; 
+    const cy = padT + innerH/2;
+    // d2p 调整为 2.45，精确计算可保证15度最左侧为 X=140.25，与纵坐标轴(X=130)不重叠
+    const d2p = 2.45; 
+
+    ctx.strokeStyle = '#888'; 
+    ctx.lineWidth = 2;
+    ctx.beginPath(); 
+    ctx.moveTo(padL, padT); 
+    ctx.lineTo(padL, h - padB); 
+    ctx.lineTo(w - padR, h - padB); 
+    ctx.stroke();
+    
+    ctx.fillStyle = '#aaa'; 
+    ctx.font = '12px Arial'; 
+    
+    ctx.textAlign = 'center';
+    for(let a = -120; a <= 120; a += 60) { 
+        let px = cx + a * d2p; 
+        if(px < padL || px > w - padR) continue;
+        ctx.beginPath(); 
+        ctx.moveTo(px, h - padB); 
+        ctx.lineTo(px, h - padB + 6); 
+        ctx.stroke(); 
+        ctx.fillText(a + '°', px, h - padB + 20); 
+    }
+    
+    ctx.textAlign = 'right';
+    for(let e = -60; e <= 60; e += 30) { 
+        let py = cy - e * d2p; 
+        if(py < padT || py > h - padB) continue;
+        ctx.beginPath(); 
+        ctx.moveTo(padL, py); 
+        ctx.lineTo(padL - 6, py); 
+        ctx.stroke(); 
+        ctx.fillText(e + '°', padL - 10, py + 4); 
+    }
+    
+    ctx.font = 'bold 14px Arial'; 
+    ctx.fillStyle = '#bbb';
+    ctx.textAlign = 'center';
+    ctx.fillText('Azimuth (°)', cx, h - 15);
+    
+    ctx.save(); 
+    ctx.translate(padL - 45, cy); 
+    ctx.rotate(-Math.PI/2); 
+    ctx.fillText('Elevation (°)', 0, 0); 
+    ctx.restore();
+    ctx.restore();
+
+    const curOff = 0 - (state.conv - 20);
+    const drawEye = (isL, path, sz) => { 
+        const s = isL ? -1 : 1, ox = cx + s * curOff * d2p; 
+        ctx.fillStyle = 'rgba(160, 100, 255, 0.25)'; ctx.fill(path); 
+        ctx.strokeStyle = 'rgba(180, 120, 255, 0.6)'; ctx.lineWidth = 1.5; ctx.stroke(path); 
+        ctx.save(); ctx.filter = 'blur(10px)'; ctx.fillStyle = 'rgba(120, 20, 200, 0.8)'; ctx.fill(sz); ctx.restore(); 
+    };
+    const makePath = (pArr, offX) => { 
+        const p = new Path2D(); 
+        pArr.forEach((pt, i) => { 
+            const px = cx + (offX + pt[0]) * d2p, py = cy - pt[1] * d2p; 
+            if(i === 0) p.moveTo(px, py); else p.lineTo(px, py); 
+        }); 
+        p.closePath(); return p; 
+    };
+    
+    const pL = makePath(TOTAL_PATH.map(v => [-v[0], v[1]]), -curOff); const pR = makePath(TOTAL_PATH, curOff);
+    const szL = makePath(SZ_PATH.map(v => [-v[0], v[1]]), -curOff); const szR = makePath(SZ_PATH, curOff);
+    
+    ctx.save(); ctx.globalCompositeOperation = 'multiply'; drawEye(true, pL, szL); drawEye(false, pR, szR); ctx.restore();
+    
+    const vx = cx + az * d2p, vy = cy - el * d2p;
+    const visL = ctx.isPointInPath(pL, vx, vy) || ctx.isPointInPath(szL, vx, vy);
+    const visR = ctx.isPointInPath(pR, vx, vy) || ctx.isPointInPath(szR, vx, vy);
+    
+    if (visL || visR) { 
+        ctx.save(); ctx.globalCompositeOperation = 'source-over'; 
+        const pR = (va / 2) * d2p, glow = Math.max(5, pR * 2.5); 
+        const g = ctx.createRadialGradient(vx, vy, 0, vx, vy, glow); 
+        g.addColorStop(0, '#ffcc00'); g.addColorStop(1, 'transparent'); 
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(vx, vy, glow, 0, Math.PI*2); ctx.fill(); 
+        ctx.restore(); 
+    }
+    return { left: visL, right: visR };
+}
+
+function drawRetinaMapping(az, el, va, visL, visR) {
+    const rad = 110, cx = 150, cy = 150, d2p = (rad * 2) / 150.0, curOff = 0 - (state.conv - 20);
+    [canv.rl, canv.rr].forEach((c, idx) => {
+        const isL = idx === 0, ctx = c.getContext('2d'), sees = isL ? visL : visR; ctx.clearRect(0,0,300,300);
+        ctx.strokeStyle = '#444'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI*2); ctx.stroke();
+        
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        
+        ctx.fillText('D', cx, 15); 
+        ctx.fillText('V', cx, 285); 
+        if (isL) { 
+            ctx.fillText('N', 15, cy); 
+            ctx.fillText('T', 285, cy); 
+        } else { 
+            ctx.fillText('T', 15, cy); 
+            ctx.fillText('N', 285, cy); 
+        }
+
+        const mY = cy + (el * d2p), mX = isL ? cx + (75 + curOff + az) * d2p : cx + (az - curOff - 75) * d2p;
+        const actR = Math.max(3, (va/2) * d2p * 1.5); const cells = isL ? state.cellsL : state.cellsR;
+        ctx.fillStyle = 'rgba(160, 32, 240, 0.6)'; cells.forEach(cl => { ctx.beginPath(); ctx.arc(cx+cl.x, cy+cl.y, 2.2, 0, Math.PI*2); ctx.fill(); });
+        if (sees) { ctx.fillStyle = 'rgba(255, 255, 0, 0.95)'; cells.forEach(cl => { let d = Math.sqrt((cx+cl.x-mX)**2 + (cy+cl.y-mY)**2); if(d < actR) { ctx.beginPath(); ctx.arc(cx+cl.x, cy+cl.y, 3.5, 0, Math.PI*2); ctx.fill(); } }); }
+    });
+}
+
+function drawTectalActivity(az, el, va, visibility) {
+    const ctx = canv.brain.getContext('2d'); 
+    const bScale = 10; const offsetX = 35, offsetY = 40; 
+    ctx.clearRect(0, 0, 500, 300);
+    
+    const drawROI = (path) => { ctx.beginPath(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5; path.forEach((p, i) => { if(i===0) ctx.moveTo(offsetX+p[0]*bScale, offsetY+p[1]*bScale); else ctx.lineTo(offsetX+p[0]*bScale, offsetY+p[1]*bScale); }); ctx.closePath(); ctx.stroke(); ctx.fillStyle = 'rgba(15, 15, 15, 0.8)'; ctx.fill(); };
+    drawROI(OT_L_PATH); drawROI(OT_R_PATH);
+    const yPos = Math.min(Math.abs(az) / 120, 1.0) * 20; const normConv = Math.max(0, Math.min((state.conv - 20) / 40, 1.0));
+    const dynamicRad = 10 + (va * 1.5); const brightRad = dynamicRad * 0.3; const alphaCenter = Math.min(0.7 + (va / 30), 1.0); 
+    const renderSpot = (isLeftBrain) => {
+        const path = isLeftBrain ? OT_L_PATH : OT_R_PATH; let xPos = isLeftBrain ? 2 + (17-2)*normConv : 41 - (41-26)*normConv;
+        const spotX = offsetX + xPos * bScale, spotY = offsetY + yPos * bScale;
+        const g = ctx.createRadialGradient(spotX, spotY, 0, spotX, spotY, dynamicRad);
+        g.addColorStop(0, `rgba(0, 255, 100, ${alphaCenter})`); g.addColorStop(brightRad/dynamicRad, `rgba(0, 255, 120, ${alphaCenter * 0.8})`); g.addColorStop(1, 'rgba(0, 200, 50, 0)'); 
+        ctx.save(); ctx.beginPath(); path.forEach((p, i) => { if(i===0) ctx.moveTo(offsetX+p[0]*bScale, offsetY+p[1]*bScale); else ctx.lineTo(offsetX+p[0]*bScale, offsetY+p[1]*bScale); }); ctx.closePath(); ctx.clip(); ctx.fillStyle = g; ctx.globalCompositeOperation = 'lighter'; ctx.fillRect(spotX-dynamicRad, spotY-dynamicRad, dynamicRad*2, dynamicRad*2); ctx.restore();
+    };
+    if (visibility.right) renderSpot(true); if (visibility.left) renderSpot(false);
+    ctx.fillStyle = '#888'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Anterior ↑', 250, 15);
+}
+
+function syncPos() { const a = parseFloat(ui.az.value)*Math.PI/180, e = parseFloat(ui.el.value)*Math.PI/180, d = parseFloat(ui.dist.value); state.pos = { x: d*Math.cos(e)*Math.sin(a), y: d*Math.cos(e)*Math.cos(a), z: d*Math.sin(e) }; render(); }
+function syncVA() { const a = parseFloat(ui.az.value)*Math.PI/180, e = parseFloat(ui.el.value)*Math.PI/180; let va = parseFloat(ui.va.value); if(va<=0) va=0.1; const newDist = (PREY_DIAMETER_MM/2) / Math.tan((va/2)*(Math.PI/180)); state.pos = { x: newDist*Math.cos(e)*Math.sin(a), y: newDist*Math.cos(e)*Math.cos(a), z: newDist*Math.sin(e) }; render(); }
+ui.az.oninput = ui.el.oninput = ui.dist.oninput = syncPos; ui.va.oninput = syncVA;
+ui.conv.oninput = (e) => { state.conv = parseInt(e.target.value); render(); };
+[canv.top, canv.side].forEach(c => {
+    c.onmousemove = (e) => { if(e.buttons !== 1) return; const rect = c.getBoundingClientRect(), mx = (e.clientX - rect.left)*(512/rect.width), my = (e.clientY - rect.top)*(512/rect.height); if(c.id === 'c-top') { state.pos.x = (mx-256)/(SCALE_MM*state.zoom.top); state.pos.y = (320-my)/(SCALE_MM*state.zoom.top); } else { state.pos.y = (380-mx)/(SCALE_MM*state.zoom.side); state.pos.z = (256-my)/(SCALE_MM*state.zoom.side); } render(); };
+    c.onwheel = (e) => { e.preventDefault(); const k = c.id === 'c-top' ? 'top' : 'side'; state.zoom[k] = Math.max(0.1, Math.min(state.zoom[k] * Math.exp(-e.deltaY*0.0015), 15)); render(); };
+});
+
+render();
+</script>
+</body>
+</html>
